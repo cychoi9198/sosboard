@@ -18,6 +18,13 @@ return [
         'dsn' => 'mysql:host=127.0.0.1;port=3306;dbname=sosboard;charset=utf8mb4',
         'user' => 'sosboard',
         'pass' => 'sosboard_dev_pw',
+
+        // To run on SQLite instead (e.g. small/low-power hardware where a separate MySQL
+        // server isn't practical) — tested and working, see the *.sqlite.sql migrations:
+        //   'driver' => 'sqlite',
+        //   'dsn' => 'sqlite:' . __DIR__ . '/../var/data/sosboard.sqlite',
+        //   'user' => null,
+        //   'pass' => null,
     ],
     'session' => [
         'name' => 'sosb_sid',

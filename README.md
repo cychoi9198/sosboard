@@ -38,7 +38,8 @@ PHP 8.1+ (프레임워크 없이 경량 자체 라우터) · PDO(MySQL/MariaDB) 
 
 - PHP **8.1 이상** (`never` 반환 타입 등 8.1 문법을 사용합니다)
 - PHP 확장: `pdo_mysql`, `mbstring`, `openssl`
-- MySQL 5.7+ 또는 MariaDB 10.x (FULLTEXT 인덱스 지원 필요)
+- MySQL 5.7+ / MariaDB 10.x 또는 SQLite 3.9+ (FTS5 필요 — 소형/저전력 하드웨어에서 별도 DB
+  서버 없이 돌리고 싶을 때. 아래 "SQLite 지원" 참고)
 - Apache 2.4 + `mod_rewrite`, `mod_deflate`, `mod_expires`, **`AllowOverride All`**
   (보안 모델이 `.htaccess`의 디렉터리 차단에 의존합니다 — 아래 참고)
 
@@ -75,7 +76,7 @@ done
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/
 /lang/ko.php,en.php,ja.php   번역 리소스 — 웹 접근 차단됨
-/sql/migrations/          스키마 마이그레이션 — 웹 접근 차단됨
+/sql/migrations/          스키마 마이그레이션(*.mysql.sql / *.sqlite.sql) — 웹 접근 차단됨
 ```
 
 `config`, `src`, `lang`, `sql`, `var` 디렉터리는 각각 `.htaccess`로 `Require all denied`
@@ -133,6 +134,35 @@ done
 기본적으로 압축하지 않습니다(Apache 자체 기본 동작). 우리 404 페이지는 2,824바이트로, 압축됐다면
 더 작았을 것 — 다만 에러 페이지는 자주 발생하지 않고 크기도 크지 않아 우선순위는 낮게 뒀습니다.
 
+### SQLite 지원 (소형/저전력 하드웨어용)
+
+라즈베리파이보다도 더 작은 하드웨어에서는 별도 MySQL/MariaDB 서버를 띄우는 것 자체가 부담일 수
+있습니다. `config/config.php`의 `db` 설정을 SQLite로 바꾸면 별도 DB 서버 없이 파일 하나로
+동작합니다:
+
+```php
+'db' => [
+    'driver' => 'sqlite',
+    'dsn' => 'sqlite:' . __DIR__ . '/../var/data/sosboard.sqlite',
+    'user' => null,
+    'pass' => null,
+],
+```
+
+마이그레이션은 `sql/migrations/*.sqlite.sql`(MySQL용과 파일명만 `.mysql.sql` → `.sqlite.sql`로
+다름, 번호는 1:1 대응)을 순서대로 적용하면 됩니다. `var/data/`는 `.htaccess`로 웹 접근이
+차단되어 있고, DB 파일 자체는 `.gitignore`에 등록되어 커밋되지 않습니다.
+
+**MySQL과 다른 점 — 게시판 검색**: MySQL의 FULLTEXT 대신 SQLite의 FTS5 가상 테이블
+(`posts_fts`)을 씁니다. `posts` 테이블에 대한 INSERT/UPDATE/DELETE를 트리거로 자동 동기화하며,
+검색 방식(단어 접두어만 매칭)과 그 트레이드오프는 MySQL 쪽과 동일합니다. 연락게시판의 전화번호
+검색(완전일치, `REPLACE()` 기반 정규화)과 rate limiting(요청 빈도 제한)은 MySQL 전용 SQL
+문법을 전혀 쓰지 않아서 코드 변경 없이 그대로 동작합니다.
+
+이 저장소를 만들면서 실제로 SQLite DB를 생성하고 마이그레이션을 적용한 뒤, 글쓰기·검색(FTS5
+접두어 매칭 포함)·카테고리 필터·연락게시판 등록/완전일치 검색/앞자리 0 제거·로그인·회원가입까지
+전부 실기로 검증했습니다.
+
 ### 알려진 제약사항
 
 - 실제 피처폰/에뮬레이터 실기 검증은 하지 않았습니다.
@@ -141,7 +171,7 @@ done
 - 게시판 검색은 사용하는 MariaDB에 CJK용 ngram 파서가 없어 **단어 맨 앞부분만** 매칭합니다
   (예: "실종"으로 검색하면 "실종자를 찾습니다"는 찾지만 "종자"로는 못 찾음).
 - 신고/블라인드 등 모더레이션 기능은 아직 없습니다(soft delete만 있어 이후 추가는 쉬운 구조).
-- SQLite 이식은 Repository 계층 구조상 가능하지만 실제 SQLite용 마이그레이션은 아직 없습니다.
+- (SQLite는 이제 지원됩니다 — 위 "SQLite 지원" 참고. 남은 건 실서버 SQLite 배포 시의 백업/운영 경험 정도입니다.)
 
 ---
 
@@ -186,7 +216,8 @@ PHP 8.1+ (no framework — a small hand-rolled router) · PDO (MySQL/MariaDB) ·
 
 - PHP **8.1+** (the code uses 8.1 syntax such as the `never` return type)
 - PHP extensions: `pdo_mysql`, `mbstring`, `openssl`
-- MySQL 5.7+ or MariaDB 10.x (FULLTEXT index support required)
+- MySQL 5.7+ / MariaDB 10.x, or SQLite 3.9+ (FTS5 required — for small/low-power hardware where
+  running a separate database server isn't practical; see "SQLite support" below)
 - Apache 2.4 with `mod_rewrite`, `mod_deflate`, `mod_expires`, and **`AllowOverride All`**
   (the security model depends on `.htaccess` directory blocking — see below)
 
@@ -224,7 +255,7 @@ or create a fresh admin account and delete this one before deploying anywhere re
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/
 /lang/ko.php,en.php,ja.php   Translation strings — blocked from web access
-/sql/migrations/          Schema migrations — blocked from web access
+/sql/migrations/          Schema migrations (*.mysql.sql / *.sqlite.sql) — blocked from web access
 ```
 
 The `config`, `src`, `lang`, `sql`, and `var` directories each carry a `.htaccess` with
@@ -285,6 +316,35 @@ etc.) by default — that's stock Apache behavior. Our 404 page is 2,824 bytes u
 would be smaller compressed, but error pages are infrequent and already small, so this was left
 as a low-priority item.
 
+### SQLite support (for small/low-power hardware)
+
+On hardware even smaller than a Raspberry Pi, running a separate MySQL/MariaDB server can be
+more overhead than it's worth. Switch `config/config.php`'s `db` block to SQLite and the app
+runs off a single file, no database server required:
+
+```php
+'db' => [
+    'driver' => 'sqlite',
+    'dsn' => 'sqlite:' . __DIR__ . '/../var/data/sosboard.sqlite',
+    'user' => null,
+    'pass' => null,
+],
+```
+
+Apply the migrations in `sql/migrations/*.sqlite.sql` (same numbering as the MySQL ones, just
+`.mysql.sql` swapped for `.sqlite.sql`), in order. `var/data/` is blocked from web access via
+`.htaccess`, and the database file itself is gitignored so it's never committed.
+
+**What's different from MySQL — board search**: instead of MySQL's FULLTEXT, this uses SQLite's
+FTS5 virtual table (`posts_fts`), kept in sync with `posts` via triggers on insert/update/delete.
+The search behavior (prefix-only matching) and its trade-off are identical to the MySQL side.
+The contact board's phone search (exact match, `REPLACE()`-based normalization) and rate
+limiting use no MySQL-specific SQL at all, so they work unchanged on SQLite.
+
+While building this, an actual SQLite database was created, migrated, and exercised end to end:
+posting, search (including FTS5 prefix matching), category filtering, contact board registration/
+exact-match search/leading-zero stripping, login, and registration all verified working.
+
 ### Known limitations
 
 - Not yet tested on real feature-phone hardware or emulators.
@@ -296,8 +356,8 @@ as a low-priority item.
   substring — won't match).
 - No moderation tools yet (report/hide) — the schema already supports soft deletes, so adding
   this later is straightforward.
-- SQLite portability was a design goal (the Repository layer isolates SQL), but no SQLite
-  migration files exist yet.
+- (SQLite is now supported — see "SQLite support" above. What's left is real-world operational
+  experience running it in production: backups, etc.)
 
 ---
 
@@ -342,7 +402,8 @@ JavaScriptなし
 
 - PHP **8.1以上**(`never`戻り値型など8.1の構文を使用しています)
 - PHP拡張: `pdo_mysql`, `mbstring`, `openssl`
-- MySQL 5.7+ または MariaDB 10.x(FULLTEXTインデックスのサポートが必要)
+- MySQL 5.7+ / MariaDB 10.x、またはSQLite 3.9+(FTS5が必要 — 別途DBサーバーを立てるのが
+  現実的でない小型・低電力ハードウェア向け。詳しくは下記「SQLiteサポート」を参照)
 - Apache 2.4 + `mod_rewrite`, `mod_deflate`, `mod_expires`, **`AllowOverride All`**
   (セキュリティモデルが`.htaccess`によるディレクトリ制限に依存しています — 下記参照)
 
@@ -380,7 +441,7 @@ done
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/
 /lang/ko.php,en.php,ja.php   翻訳リソース — Webアクセス不可
-/sql/migrations/          スキーママイグレーション — Webアクセス不可
+/sql/migrations/          スキーママイグレーション(*.mysql.sql / *.sqlite.sql) — Webアクセス不可
 ```
 
 `config`, `src`, `lang`, `sql`, `var` の各ディレクトリにはそれぞれ`.htaccess`で
@@ -442,6 +503,35 @@ done
 ページは2,824バイト(非圧縮)で、圧縮されればもっと小さくなりますが、エラーページは発生頻度が
 低くサイズも小さいため、優先度は低いままにしています。
 
+### SQLiteサポート(小型・低電力ハードウェア向け)
+
+ラズベリーパイよりさらに小さいハードウェアでは、別途MySQL/MariaDBサーバーを立てること自体が
+負担になる場合があります。`config/config.php`の`db`設定をSQLiteに変えれば、別のDBサーバーなしに
+ファイル1つで動作します。
+
+```php
+'db' => [
+    'driver' => 'sqlite',
+    'dsn' => 'sqlite:' . __DIR__ . '/../var/data/sosboard.sqlite',
+    'user' => null,
+    'pass' => null,
+],
+```
+
+マイグレーションは`sql/migrations/*.sqlite.sql`(MySQL用とファイル名の`.mysql.sql`部分だけが
+`.sqlite.sql`に変わり、番号は1対1で対応)を順番に適用してください。`var/data/`は`.htaccess`で
+Webアクセスを禁止しており、DBファイル自体も`.gitignore`に登録されているためコミットされません。
+
+**MySQLとの違い — 掲示板検索**: MySQLのFULLTEXTの代わりに、SQLiteのFTS5仮想テーブル
+(`posts_fts`)を使用します。`posts`テーブルへのINSERT/UPDATE/DELETEをトリガーで自動的に同期し、
+検索方式(単語の先頭部分のみマッチ)とそのトレードオフはMySQL側と同じです。連絡掲示板の電話番号
+検索(完全一致、`REPLACE()`による正規化)とレート制限は、MySQL固有のSQL構文を一切使っていない
+ため、コード変更なしでそのまま動作します。
+
+このリポジトリを作る過程で、実際にSQLiteのデータベースを作成してマイグレーションを適用した上で、
+投稿・検索(FTS5の前方一致マッチを含む)・カテゴリ絞り込み・連絡掲示板の登録/完全一致検索/先頭の
+0の除去・ログイン・会員登録まで、すべて実機で検証済みです。
+
 ### 既知の制約事項
 
 - 実機のフィーチャーフォンやエミュレーターでの実機検証はまだ行っていません。
@@ -452,5 +542,5 @@ done
   探しています)は見つかりますが、単語途中の部分文字列「종자」では見つかりません)。
 - 通報/非表示などのモデレーション機能はまだありません(ソフトデリートの仕組みは既にあるため、
   後から追加しやすい構造です)。
-- SQLiteへの移植性は設計目標の一つでした(Repository層がSQLを分離しています)が、実際のSQLite用
-  マイグレーションファイルはまだありません。
+- (SQLiteは現在サポートされています — 上記「SQLiteサポート」を参照。残っているのは本番環境で
+  SQLiteを運用する際のバックアップなどの実運用上の経験のみです。)

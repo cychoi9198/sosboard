@@ -14,8 +14,17 @@ final class PostRepository
      */
     public function listPage(?string $category, ?string $searchQuery, ?int $beforeId, int $limit): array
     {
+        // A leading-wildcard LIKE can't use an index and forces a full table scan as posts grow,
+        // so search goes through a real full-text index instead — MySQL/MariaDB's FULLTEXT in
+        // boolean mode, or SQLite's FTS5 virtual table (posts_fts, kept in sync by triggers —
+        // see the *.sqlite.sql migrations). Both build an AND-of-prefixes query: every word
+        // becomes a required prefix term, so this only matches from the START of a word (neither
+        // engine here has a CJK ngram tokenizer for true substring search).
+        $isSqlite = Db::driver() === 'sqlite';
+        $ftsJoin = ($isSqlite && $searchQuery !== null) ? ' JOIN posts_fts ON posts_fts.rowid = p.id' : '';
+
         $sql = 'SELECT p.*, u.nickname AS user_nickname
-                FROM posts p LEFT JOIN users u ON u.id = p.user_id
+                FROM posts p LEFT JOIN users u ON u.id = p.user_id' . $ftsJoin . '
                 WHERE p.status = 1';
         $params = [];
 
@@ -24,14 +33,18 @@ final class PostRepository
             $params['category'] = $category;
         }
         if ($searchQuery !== null) {
-            // A leading-wildcard LIKE can't use an index and forces a full table scan, so we
-            // use the FULLTEXT index in boolean mode instead: each word becomes a required
-            // ("+") prefix ("*") term. Trade-off: this only matches from the START of a word
-            // (MariaDB has no ngram parser for true CJK substring search), not anywhere within it.
-            $booleanQuery = self::buildBooleanPrefixQuery($searchQuery);
-            if ($booleanQuery !== '') {
-                $sql .= ' AND MATCH(p.title, p.body) AGAINST(:q IN BOOLEAN MODE)';
-                $params['q'] = $booleanQuery;
+            if ($isSqlite) {
+                $ftsQuery = self::buildSqliteFtsQuery($searchQuery);
+                if ($ftsQuery !== '') {
+                    $sql .= ' AND posts_fts MATCH :q';
+                    $params['q'] = $ftsQuery;
+                }
+            } else {
+                $booleanQuery = self::buildBooleanPrefixQuery($searchQuery);
+                if ($booleanQuery !== '') {
+                    $sql .= ' AND MATCH(p.title, p.body) AGAINST(:q IN BOOLEAN MODE)';
+                    $params['q'] = $booleanQuery;
+                }
             }
         }
         if ($beforeId !== null) {
@@ -52,16 +65,29 @@ final class PostRepository
     }
 
     /**
-     * Turns free-text user input into a boolean-mode MATCH...AGAINST expression: every word
-     * becomes a required prefix term ("+word*"), so a multi-word search is an AND of prefixes.
-     * Strips boolean-mode operator characters out of the raw words first so a user typing
-     * "-" or "+" or "*" can't change the query's meaning (e.g. turn it into a NOT search).
+     * MySQL/MariaDB boolean-mode MATCH...AGAINST: every word becomes a required prefix term
+     * ("+word*"), so a multi-word search is an AND of prefixes. Strips boolean-mode operator
+     * characters out of the raw words first so a user typing "-" or "+" or "*" can't change the
+     * query's meaning (e.g. turn it into a NOT search).
      */
     private static function buildBooleanPrefixQuery(string $rawQuery): string
     {
         $cleaned = preg_replace('/[+\-<>()~*"@]/u', ' ', $rawQuery);
         $words = preg_split('/\s+/u', trim($cleaned), -1, PREG_SPLIT_NO_EMPTY);
         $terms = array_map(static fn (string $w): string => '+' . $w . '*', $words);
+        return implode(' ', $terms);
+    }
+
+    /**
+     * SQLite FTS5 query: each word is quoted (so it can't be mistaken for a reserved operator
+     * like AND/OR/NOT, and embedded FTS5 syntax characters in it are inert) with a trailing "*"
+     * for prefix matching. Space-separated quoted terms are ANDed together by default in FTS5.
+     */
+    private static function buildSqliteFtsQuery(string $rawQuery): string
+    {
+        $cleaned = preg_replace('/["*]/u', ' ', $rawQuery);
+        $words = preg_split('/\s+/u', trim($cleaned), -1, PREG_SPLIT_NO_EMPTY);
+        $terms = array_map(static fn (string $w): string => '"' . $w . '"*', $words);
         return implode(' ', $terms);
     }
 

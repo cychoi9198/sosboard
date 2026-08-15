@@ -28,9 +28,17 @@ final class Db
             $pdo->exec("SET time_zone = '+00:00'");
         } elseif ($config['driver'] === 'sqlite') {
             $pdo->exec('PRAGMA foreign_keys = ON');
+            // WAL lets reads and writes proceed concurrently instead of blocking on one file
+            // lock — matters on small/low-power hardware where SQLite is the whole database.
+            $pdo->exec('PRAGMA journal_mode = WAL');
         }
 
         self::$instance = $pdo;
         return $pdo;
+    }
+
+    public static function driver(): string
+    {
+        return Config::get('db')['driver'];
     }
 }

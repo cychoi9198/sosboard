@@ -5,3 +5,8 @@
 Thumbs.db
 .DS_Store
 *.swp
+
+# SQLite runtime database (created locally when driver=sqlite; never committed)
+/var/data/*.sqlite
+/var/data/*.sqlite-wal
+/var/data/*.sqlite-shm

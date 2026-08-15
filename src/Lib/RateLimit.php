@@ -28,10 +28,10 @@ final class RateLimit
         $stmt = Db::conn()->prepare(
             'SELECT COUNT(*) AS c FROM login_attempts
              WHERE identifier = :identifier AND success = 0
-               AND attempted_at > (NOW() - INTERVAL :minutes MINUTE)'
+               AND attempted_at > :cutoff'
         );
         $stmt->bindValue('identifier', $identifier);
-        $stmt->bindValue('minutes', $windowMinutes, \PDO::PARAM_INT);
+        $stmt->bindValue('cutoff', self::cutoff($windowMinutes));
         $stmt->execute();
         $count = (int) $stmt->fetch()['c'];
         return $count >= $maxAttempts;
@@ -78,12 +78,22 @@ final class RateLimit
     {
         $stmt = Db::conn()->prepare(
             "SELECT COUNT(*) AS c FROM {$table}
-             WHERE ip_hash = :ip AND attempted_at > (NOW() - INTERVAL :minutes MINUTE)"
+             WHERE ip_hash = :ip AND attempted_at > :cutoff"
         );
         $stmt->bindValue('ip', $ipHash);
-        $stmt->bindValue('minutes', $windowMinutes, \PDO::PARAM_INT);
+        $stmt->bindValue('cutoff', self::cutoff($windowMinutes));
         $stmt->execute();
         $count = (int) $stmt->fetch()['c'];
         return $count >= $maxAttempts;
+    }
+
+    /**
+     * Computed here instead of with SQL date arithmetic (MySQL's "NOW() - INTERVAL n MINUTE" has
+     * no SQLite equivalent) so the same query works on both drivers — attempted_at is always
+     * stored as a UTC "Y-m-d H:i:s" string on both, which compares correctly as text.
+     */
+    private static function cutoff(int $windowMinutes): string
+    {
+        return gmdate('Y-m-d H:i:s', time() - $windowMinutes * 60);
     }
 }
