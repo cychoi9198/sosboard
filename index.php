@@ -40,7 +40,7 @@ $GLOBALS['inlineCss'] = $inlineCss;
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: same-origin');
-header("Content-Security-Policy: default-src 'self'; style-src 'sha256-{$cssHash}'; img-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'");
+header("Content-Security-Policy: default-src 'self'; style-src 'sha256-{$cssHash}'; img-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'");
 
 Session::start();
 
