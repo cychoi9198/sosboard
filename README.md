@@ -1,6 +1,6 @@
 # SOSBoard
 
-**[한국어](#한국어)** | **[English](#english)**
+**[한국어](#한국어)** | **[English](#english)** | **[日本語](#日本語)**
 
 ---
 
@@ -23,7 +23,9 @@
   세션 마커가 없으면 검사를 통과가 아니라 실패로 처리), 제목/내용/닉네임 태그(`<`,`>`) 입력 차단,
   비밀번호 bcrypt 해시 + 존재하지 않는 계정에도 동일한 타이밍으로 응답(계정 존재 여부 추측 방지),
   모든 SQL은 PDO 준비된 구문만 사용, soft delete. 2026-08-16에 전체 코드베이스를 직접 감사해서
-  회원가입에 빈도 제한이 빠져있던 것과 최소 작성 시간 검사를 우회할 수 있던 로직을 찾아 고쳤습니다.
+  회원가입에 빈도 제한이 빠져있던 것과 최소 작성 시간 검사를 우회할 수 있던 로직을 찾아 고쳤고,
+  이어서 오픈 리다이렉트·Host 헤더 주입·경로 순회·세션 쿠키 속성까지 범위를 넓혀 재점검했지만
+  추가로 발견된 건 없었습니다. CSP에는 `object-src 'none'`도 추가했습니다.
 - **성능**: CSS를 매 요청 HTML에 인라인 삽입해 페이지당 HTTP 요청 1개로 유지(저대역폭 회선 대응),
   gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름). 56Kbps 기준 실측: 각 페이지가
   1.2~2KB(gzip 후)로 압축되어 0.2~0.3초 안에 전송됩니다 — 아래 "성능 실측" 참고.
@@ -168,7 +170,9 @@ slow connections.
   username enumeration), every SQL query goes through PDO prepared statements, soft deletes.
   A full self-audit on 2026-08-16 found and fixed two real gaps: registration had no rate
   limiting at all, and the minimum-fill-time check could be silently bypassed by skipping the
-  initial page load.
+  initial page load. A broader follow-up pass (open redirect, Host-header injection, path
+  traversal, session cookie attributes) found nothing further. Also added `object-src 'none'`
+  to the CSP.
 - **Performance**: CSS is inlined into every response (no separate stylesheet request — one HTTP
   request per page, which matters on high-latency connections), gzip compression, keyset pagination
   that stays fast at scale. Measured at simulated 56Kbps: every page compresses to 1.2-2KB and
@@ -294,3 +298,159 @@ as a low-priority item.
   this later is straightforward.
 - SQLite portability was a design goal (the Repository layer isolates SQL), but no SQLite
   migration files exist yet.
+
+---
+
+## 日本語
+
+2008年以降に発売されたWi-Fi対応フィーチャーフォンから最新ブラウザまで、幅広い端末で動作することを
+目指して作った多言語(韓国語/英語/日本語)の災害・緊急情報掲示板です。JavaScriptを使わずサーバー
+サイドレンダリングと最小限のCSSだけで動作するように設計しており、低スペック端末や低速回線でも
+ページが表示されます。
+
+### 主な機能
+
+- **災害対応カテゴリ**: 救助要請・安否確認・行方不明・災害情報・自由・お知らせ(管理者専用)
+- **会員/非会員投稿の併用**: アカウントでログインするか、ニックネーム+パスワードだけで匿名投稿可能
+- **タイトル/本文検索**: MySQL/MariaDBのFULLTEXTインデックスによる前方一致検索(先頭にワイルド
+  カードが付く`LIKE`はインデックスを使えないため、掲示板が大きくなっても検索速度を維持できます)
+- **連絡掲示板**(`/contact`): 通常の掲示板とは別に、**電話番号+200文字以内の内容**だけを残せる
+  緊急連絡用の掲示板。国番号選択(23か国)、一覧では番号の一部をマスキング、完全一致検索に対応
+- **多言語対応**: URLパスプレフィックス(`/ko`, `/en`, `/ja`) + `Accept-Language`自動判定 +
+  手動切り替え
+- **セキュリティ**: すべての出力を例外なくエスケープ(`View::e()`)、すべての状態変更リクエストに
+  CSRFトークン、投稿/ログイン/会員登録すべてにIP・アカウント単位のレート制限、スパム対策
+  (ハニーポット + 最短入力時間 — セッションのマーカーが無い場合はチェック通過ではなく失敗として
+  扱う)、タイトル/本文/ニックネームでのタグ(`<`,`>`)入力を拒否、bcryptによるパスワードハッシュ化
+  + 存在しないアカウントに対しても同じタイミングで応答(アカウントの存在推測を防止)、すべての
+  SQLはPDOのプリペアドステートメントのみを使用、ソフトデリート。2026-08-16にコードベース全体を
+  自己監査し、会員登録にレート制限が無かった点と最短入力時間チェックを回避できた点の2件を発見・
+  修正しました。続けてオープンリダイレクト・Hostヘッダーインジェクション・パストラバーサル・
+  セッションCookie属性まで範囲を広げて再点検しましたが、追加の問題は見つかりませんでした。CSPに
+  `object-src 'none'`も追加しています。
+- **パフォーマンス**: CSSを毎リクエストHTMLにインライン挿入し、ページごとのHTTPリクエストを
+  1つに抑えています(低帯域回線向け)。gzip圧縮、keysetページネーション(データ量が多くても高速)。
+  56Kbpsでの実測ではページごとに圧縮後1.2〜2KBで、転送時間は0.2〜0.3秒 — 詳細は下記
+  「実測パフォーマンス」を参照。
+
+### 技術スタック
+
+PHP 8.1+ (フレームワークなし、軽量な自作ルーター) · PDO(MySQL/MariaDB) · 素のCSS ·
+JavaScriptなし
+
+### 動作要件
+
+- PHP **8.1以上**(`never`戻り値型など8.1の構文を使用しています)
+- PHP拡張: `pdo_mysql`, `mbstring`, `openssl`
+- MySQL 5.7+ または MariaDB 10.x(FULLTEXTインデックスのサポートが必要)
+- Apache 2.4 + `mod_rewrite`, `mod_deflate`, `mod_expires`, **`AllowOverride All`**
+  (セキュリティモデルが`.htaccess`によるディレクトリ制限に依存しています — 下記参照)
+
+### セットアップ
+
+```bash
+# 1. Webサーバーのドキュメントルートにリポジトリを配置
+git clone https://github.com/<your-account>/sosboard.git
+
+# 2. データベースを作成
+mysql -u root -e "CREATE DATABASE sosboard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 3. マイグレーションを適用(必ず --default-character-set=utf8mb4 を指定 — 指定しないと
+#    韓国語/日本語などのマルチバイト文字がインポート時に文字化けします)
+for f in sql/migrations/*.sql; do
+  mysql --default-character-set=utf8mb4 -u root sosboard < "$f"
+done
+
+# 4. config/config.php を編集: DB接続情報、security.ip_pepper、本番環境ではapp.debugをfalseに
+```
+
+初期管理者アカウントは `admin` / `ChangeMe123!` です。**初回ログイン後に必ずパスワードを変更する
+か、実際にデプロイする前に新しい管理者アカウントを作成してこのアカウントは削除してください。**
+
+### ディレクトリ構成
+
+```
+/index.php            フロントコントローラー(ルーティング、毎リクエストstyle.cssを読み込んでインライン化)
+/.htaccess             リライトルール + セキュリティヘッダー + ディレクトリ制限
+/style.css              CSSの元ソース(ブラウザに直接配信されず、index.phpが読み込んでインライン化)
+/config/config.php      アプリ設定(DB、セッション、セキュリティ、制限値) — Webアクセス不可
+/src/Lib/                Db, Session, Csrf, I18n, Auth, View, Validator, RateLimit, Url, Dates,
+                         Phone, Countries, Config
+/src/Repository/         UserRepository, PostRepository, ContactRepository (PDO)
+/src/Controller/         BoardController, AuthController, ContactController
+/src/Views/               board/, contact/, auth/, partials/
+/lang/ko.php,en.php,ja.php   翻訳リソース — Webアクセス不可
+/sql/migrations/          スキーママイグレーション — Webアクセス不可
+```
+
+`config`, `src`, `lang`, `sql`, `var` の各ディレクトリにはそれぞれ`.htaccess`で
+`Require all denied`を設定しており、ブラウザから直接アクセスできません。本番環境にデプロイする
+場合は、vhostのDocumentRootを専用の`public/`フォルダに向け、それ以外をWebルートの外に置く方が
+より安全です。
+
+### ラズベリーパイ / Linuxへのデプロイで確認すべき点
+
+- **PHP 8.1以上が必要です**: Raspberry Pi OS Bookworm(デフォルトでPHP 8.2)なら問題ありませんが、
+  旧バージョンのBullseye(デフォルトでPHP 7.4)ではサードパーティのリポジトリで新しいPHPを
+  導入する必要があります。
+- **`AllowOverride All`が必須です**: Debian系のApacheのデフォルトは`AllowOverride None`のため、
+  そのままだと`.htaccess`が無視され、`/sql/migrations/*.sql`(管理者パスワードのハッシュを含む)
+  などの保護対象ディレクトリがそのまま公開されてしまいます。
+- 必要なaptパッケージの例: `apache2 php php-mysql php-mbstring mariadb-server`、
+  `a2enmod rewrite deflate expires` でモジュールを有効化する必要があります。
+
+### 実測パフォーマンス(56Kbpsシミュレーション)
+
+2026-08-16に、gzipが実際には無効になっていたことが判明し(このXAMPP環境の`httpd.conf`で
+`mod_deflate`/`mod_filter`がデフォルトでコメントアウトされていました — ローカル環境固有の問題で、
+リポジトリのコードとは無関係)、有効化した上で測定した数値です。56Kbps = 毎秒7,000バイトとして
+計算しています。
+
+| ページ | 元サイズ | gzip後 | 削減率 | 56K転送時間 |
+|---|---:|---:|---:|---:|
+| 掲示板一覧 | 5,554 B | 1,742 B | 69% | 0.25s |
+| 投稿フォーム | 4,134 B | 1,742 B | 58% | 0.25s |
+| 投稿詳細 | 3,412 B | 1,557 B | 54% | 0.22s |
+| 連絡掲示板一覧 | 4,684 B | 1,929 B | 59% | 0.28s |
+| 連絡掲示板投稿フォーム | 4,863 B | 1,998 B | 59% | 0.29s |
+| ログイン | 3,252 B | 1,362 B | 58% | 0.19s |
+
+ページごとのリクエストは1つだけなので(CSSインライン化)、実際の体感読み込み時間は上記の転送時間に
+ダイヤルアップモデムの接続遅延(往復約0.15〜0.2秒)を加えた程度 — つまりどのページもおよそ
+0.4〜0.5秒で表示されると見込まれます。なお掲示板一覧は常に10件しか表示しないため(keyset
+ページネーション)、投稿が6万件でも10件でもこのページサイズは変わりません。
+
+**回線ノイズを考慮(実効速度30%、約16.8Kbps = 毎秒2,100バイト)**: 実際のアナログ回線は
+ノイズや再送のため、表示速度の100%が出ることはほとんどありません。30%と仮定して再計算:
+
+| ページ | gzip後 | 実効30%での転送時間 |
+|---|---:|---:|
+| 掲示板一覧 | 1,742 B | 0.83s |
+| 投稿フォーム | 1,742 B | 0.83s |
+| 投稿詳細 | 1,559 B | 0.74s |
+| 連絡掲示板一覧 | 1,929 B | 0.92s |
+| 連絡掲示板投稿フォーム | 2,000 B | 0.95s |
+| ログイン | 1,361 B | 0.65s |
+
+ノイズのある回線は接続遅延も通常悪化するため(再送・ジッター)、接続遅延を余裕を持って
+約0.3〜0.4秒とすると、**体感読み込み時間はおよそ1.1〜1.3秒** — それでも十分実用的な範囲です。
+`curl --limit-rate 2100`で実際の転送をシミュレーションしても(0.64〜0.65秒、理論値よりやや
+速め — curlのレート制限が最初のバーストを許容しているためと考えられます)同じ桁の数値になります。
+
+**残っている弱点が1つ**: Apacheの`mod_deflate`は、HTTPステータスコードが2xx以外の応答
+(404、500など)をデフォルトでは圧縮しません(Apacheそのものの標準動作です)。当アプリの404
+ページは2,824バイト(非圧縮)で、圧縮されればもっと小さくなりますが、エラーページは発生頻度が
+低くサイズも小さいため、優先度は低いままにしています。
+
+### 既知の制約事項
+
+- 実機のフィーチャーフォンやエミュレーターでの実機検証はまだ行っていません。
+- HTTPS/TLSの方針は未確定です — レガシー端末は最新の証明書を検証できないことが多く、平文HTTPを
+  併用するかどうか、それがログイン機能とどう関わるかを実際のデプロイ前に決める必要があります。
+- 掲示板検索は、使用しているMariaDBにCJK用のngramパーサーが無いため、**単語の先頭部分のみ**
+  マッチします(例: 韓国語で「실종」(行方不明)と検索すると「실종자를 찾습니다」(行方不明者を
+  探しています)は見つかりますが、単語途中の部分文字列「종자」では見つかりません)。
+- 通報/非表示などのモデレーション機能はまだありません(ソフトデリートの仕組みは既にあるため、
+  後から追加しやすい構造です)。
+- SQLiteへの移植性は設計目標の一つでした(Repository層がSQLを分離しています)が、実際のSQLite用
+  マイグレーションファイルはまだありません。
