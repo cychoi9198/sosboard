@@ -1,0 +1,36 @@
+body{font-family:sans-serif;max-width:640px;margin:0 auto;padding:8px;color:#222;background:#fff}
+header{border-bottom:2px solid #333;margin-bottom:10px;padding-bottom:6px}
+header h1{font-size:18px;margin:0 0 6px}
+header h1 a{color:#222;text-decoration:none}
+nav{font-size:13px}
+nav a{margin-right:8px}
+.lang{float:right;font-size:12px}
+.lang a{margin-left:4px}
+.flash{padding:6px;margin:8px 0;border:1px solid #999}
+.flash-success{background:#eaffea;border-color:#4a4}
+.flash-error{background:#ffeaea;border-color:#a44}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid #ccc;padding:5px 4px;text-align:left}
+th{background:#f2f2f2}
+.cat{font-size:11px;color:#555;border:1px solid #ccc;padding:1px 4px}
+.toolbar{margin:8px 0;text-align:right}
+.toolbar a{margin-left:8px}
+.pager{margin:10px 0;text-align:center}
+form p{margin:8px 0}
+label{display:block;font-size:13px;margin-bottom:2px}
+input[type=text],input[type=password],select,textarea{width:100%;box-sizing:border-box;padding:5px;font-size:14px;border:1px solid #999}
+textarea{height:120px}
+.hint{font-size:11px;color:#777}
+.errors{border:1px solid #a44;background:#ffeaea;padding:6px;margin:8px 0;font-size:13px}
+.errors p{margin:2px 0}
+.actions{margin-top:10px}
+.btn{display:inline-block;padding:6px 12px;border:1px solid #333;background:#f0f0f0;color:#222;text-decoration:none;font-size:13px;cursor:pointer}
+.postbody{word-wrap:break-word;overflow-wrap:break-word;border:1px solid #ddd;padding:8px;margin:8px 0;font-size:14px}
+.meta{font-size:12px;color:#666;margin-bottom:6px}
+.honeypot{position:absolute;left:-9999px;top:-9999px}
+footer{margin-top:20px;padding-top:6px;border-top:1px solid #ccc;font-size:11px;color:#888}
+.active-link{font-weight:bold}
+.inline-form{display:inline}
+.link-btn{display:inline;border:none;background:none;padding:0;font:inherit;color:#06c;cursor:pointer;text-decoration:underline}
+.delete-form{display:inline-block;margin-left:8px}
+.delete-form input[type=password]{width:auto;display:inline-block}

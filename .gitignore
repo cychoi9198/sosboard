@@ -1,0 +1,7 @@
+# Not part of this project — other unrelated local projects living in the same XAMPP htdocs.
+/새 폴더/
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+*.swp
