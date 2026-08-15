@@ -110,6 +110,23 @@ done
 것으로 예상됩니다. 참고로 게시판 목록은 항상 10건만 보여주므로(keyset 페이지네이션), 게시글이
 6만 건이든 10건이든 이 페이지 크기는 그대로입니다.
 
+**회선 노이즈 감안 (실효 속도 30%, 약 16.8Kbps = 초당 2,100바이트)**: 실제 아날로그 회선은
+잡음·재전송 때문에 표기 속도의 100%가 나오는 경우가 거의 없습니다. 30% 가정으로 재계산:
+
+| 페이지 | gzip 후 | 30% 실효 전송 시간 |
+|---|---:|---:|
+| 게시판 목록 | 1,742 B | 0.83s |
+| 글쓰기 폼 | 1,742 B | 0.83s |
+| 글 상세보기 | 1,559 B | 0.74s |
+| 연락게시판 목록 | 1,929 B | 0.92s |
+| 연락게시판 글쓰기 | 2,000 B | 0.95s |
+| 로그인 | 1,361 B | 0.65s |
+
+노이즈가 있는 회선은 연결 지연도 보통 더 나쁘므로(재전송·지터), 연결 지연을 넉넉하게 ~0.3~0.4초로
+잡으면 **체감 로딩 시간은 대략 1.1~1.3초** — 여전히 사용 가능한 수준입니다. `curl --limit-rate
+2100`으로 실제 전송을 시뮬레이션해도(0.64~0.65초, 이론치보다 약간 빠름 — curl 레이트리밋의 초기
+버스트 허용 때문으로 보임) 같은 자릿수로 확인됩니다.
+
 **한 가지 남은 약점**: Apache `mod_deflate`는 HTTP 상태코드가 2xx가 아닌 응답(404, 500 등)은
 기본적으로 압축하지 않습니다(Apache 자체 기본 동작). 우리 404 페이지는 2,824바이트로, 압축됐다면
 더 작았을 것 — 다만 에러 페이지는 자주 발생하지 않고 크기도 크지 않아 우선순위는 낮게 뒀습니다.
@@ -240,6 +257,24 @@ Since there's only one HTTP request per page (CSS is inlined), real-world load t
 the transfer time above plus a dial-up modem's connection latency (~0.15-0.2s round trip) — so
 any page should render in about 0.4-0.5s total. The board list always shows exactly 10 posts
 (keyset pagination), so this page size stays constant whether the board has 10 posts or 60,000.
+
+**Accounting for line noise (30% effective throughput, ~16.8Kbps = 2,100 bytes/sec)**: a real
+analog line rarely sustains 100% of its rated speed due to noise and retransmissions. Recomputed
+at 30%:
+
+| Page | Gzipped | Transfer @30% effective |
+|---|---:|---:|
+| Board list | 1,742 B | 0.83s |
+| Write form | 1,742 B | 0.83s |
+| Post detail | 1,559 B | 0.74s |
+| Contact board list | 1,929 B | 0.92s |
+| Contact write form | 2,000 B | 0.95s |
+| Login | 1,361 B | 0.65s |
+
+A noisy line also usually means worse connection latency (retransmits, jitter); budgeting a more
+generous ~0.3-0.4s for that puts **real-world load time at roughly 1.1-1.3s** — still entirely
+usable. An actual simulated transfer via `curl --limit-rate 2100` lands in the same ballpark
+(0.64-0.65s, somewhat faster than the pure math — likely curl's rate limiter allowing an initial burst).
 
 **One remaining weak spot**: Apache's `mod_deflate` doesn't compress non-2xx responses (404, 500,
 etc.) by default — that's stock Apache behavior. Our 404 page is 2,824 bytes uncompressed; it
