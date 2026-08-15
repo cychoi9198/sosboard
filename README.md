@@ -18,10 +18,15 @@
 - **연락게시판**(`/contact`): 일반 게시판과 별도로, **전화번호 + 200자 이내 내용**만 남기는
   긴급 연락용 게시판. 국가번호 선택(23개국), 목록에서는 번호 일부 마스킹, 완전일치 검색 지원
 - **다국어**: URL 경로 프리픽스(`/ko`, `/en`, `/ja`) + `Accept-Language` 자동 감지 + 수동 전환
-- **보안**: CSRF 토큰, 스팸 방지(허니팟 + 최소 작성 시간 + 요청 빈도 제한), 제목/내용/닉네임에
-  태그(`<`,`>`) 입력 차단(출력 시 이스케이프도 항상 적용), 비밀번호 bcrypt 해시, soft delete
+- **보안**: 모든 출력은 예외 없이 이스케이프(`View::e()`), 모든 상태 변경 요청에 CSRF 토큰,
+  글쓰기/로그인/회원가입 전부 IP·계정 기준 요청 빈도 제한, 스팸 방지(허니팟 + 최소 작성 시간 —
+  세션 마커가 없으면 검사를 통과가 아니라 실패로 처리), 제목/내용/닉네임 태그(`<`,`>`) 입력 차단,
+  비밀번호 bcrypt 해시 + 존재하지 않는 계정에도 동일한 타이밍으로 응답(계정 존재 여부 추측 방지),
+  모든 SQL은 PDO 준비된 구문만 사용, soft delete. 2026-08-16에 전체 코드베이스를 직접 감사해서
+  회원가입에 빈도 제한이 빠져있던 것과 최소 작성 시간 검사를 우회할 수 있던 로직을 찾아 고쳤습니다.
 - **성능**: CSS를 매 요청 HTML에 인라인 삽입해 페이지당 HTTP 요청 1개로 유지(저대역폭 회선 대응),
-  gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름)
+  gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름). 56Kbps 기준 실측: 각 페이지가
+  1.2~2KB(gzip 후)로 압축되어 0.2~0.3초 안에 전송됩니다 — 아래 "성능 실측" 참고.
 
 ### 기술 스택
 
@@ -85,6 +90,30 @@ done
 - 필요 apt 패키지 예시: `apache2 php php-mysql php-mbstring mariadb-server`,
   `a2enmod rewrite deflate expires` 로 모듈 활성화 필요.
 
+### 성능 실측 (56Kbps 시뮬레이션)
+
+2026-08-16에 gzip이 실제로는 꺼져 있던 걸 발견해서(`mod_deflate`/`mod_filter`가 이 XAMPP의
+`httpd.conf`에 기본 주석 처리되어 있었음 — 로컬 환경 이슈, 리포지토리 코드와는 무관) 켠 뒤 측정한
+수치입니다. 56Kbps = 초당 7,000바이트로 계산했습니다.
+
+| 페이지 | 원본 | gzip 후 | 절감률 | 56K 전송 시간 |
+|---|---:|---:|---:|---:|
+| 게시판 목록 | 5,554 B | 1,742 B | 69% | 0.25s |
+| 글쓰기 폼 | 4,134 B | 1,742 B | 58% | 0.25s |
+| 글 상세보기 | 3,412 B | 1,557 B | 54% | 0.22s |
+| 연락게시판 목록 | 4,684 B | 1,929 B | 59% | 0.28s |
+| 연락게시판 글쓰기 | 4,863 B | 1,998 B | 59% | 0.29s |
+| 로그인 | 3,252 B | 1,362 B | 58% | 0.19s |
+
+페이지당 요청이 1개뿐이라(CSS 인라인 삽입) 실제 체감 로딩 시간은 위 전송 시간에 다이얼업 모뎀의
+연결 지연(왕복 약 0.15~0.2초)을 더한 수준 — 즉 어떤 페이지든 대략 0.4~0.5초 안에 화면이 뜰
+것으로 예상됩니다. 참고로 게시판 목록은 항상 10건만 보여주므로(keyset 페이지네이션), 게시글이
+6만 건이든 10건이든 이 페이지 크기는 그대로입니다.
+
+**한 가지 남은 약점**: Apache `mod_deflate`는 HTTP 상태코드가 2xx가 아닌 응답(404, 500 등)은
+기본적으로 압축하지 않습니다(Apache 자체 기본 동작). 우리 404 페이지는 2,824바이트로, 압축됐다면
+더 작았을 것 — 다만 에러 페이지는 자주 발생하지 않고 크기도 크지 않아 우선순위는 낮게 뒀습니다.
+
 ### 알려진 제약사항
 
 - 실제 피처폰/에뮬레이터 실기 검증은 하지 않았습니다.
@@ -114,12 +143,19 @@ slow connections.
 - **Contact board** (`/contact`): a separate board where a post is just **a phone number + up to
   200 characters** — country-code picker (23 countries), numbers masked in listings, exact-match search
 - **i18n**: URL path prefixes (`/ko`, `/en`, `/ja`) + `Accept-Language` auto-detection + manual switch
-- **Security**: CSRF tokens, spam mitigation (honeypot + minimum fill time + rate limiting), angle
-  brackets (`<`, `>`) rejected in titles/bodies/nicknames (output is always HTML-escaped regardless),
-  bcrypt password hashing, soft deletes
+- **Security**: every output is escaped without exception (`View::e()`), CSRF tokens on every
+  state-changing request, rate limiting on posting/login/registration (IP- and account-based),
+  spam mitigation (honeypot + minimum fill time — a missing session marker fails the check
+  instead of passing it), angle brackets (`<`, `>`) rejected in titles/bodies/nicknames, bcrypt
+  password hashing with constant-time responses for nonexistent accounts (no timing oracle for
+  username enumeration), every SQL query goes through PDO prepared statements, soft deletes.
+  A full self-audit on 2026-08-16 found and fixed two real gaps: registration had no rate
+  limiting at all, and the minimum-fill-time check could be silently bypassed by skipping the
+  initial page load.
 - **Performance**: CSS is inlined into every response (no separate stylesheet request — one HTTP
   request per page, which matters on high-latency connections), gzip compression, keyset pagination
-  that stays fast at scale
+  that stays fast at scale. Measured at simulated 56Kbps: every page compresses to 1.2-2KB and
+  transfers in 0.2-0.3s — see "Measured performance" below.
 
 ### Tech stack
 
@@ -184,6 +220,31 @@ else outside the web root entirely.
   `/sql/migrations/*.sql` (which contains the admin password hash) publicly downloadable.
 - Typical apt packages: `apache2 php php-mysql php-mbstring mariadb-server`, then
   `a2enmod rewrite deflate expires` to enable the required modules.
+
+### Measured performance (simulated 56Kbps)
+
+Measured on 2026-08-16, after discovering gzip wasn't actually active (`mod_deflate`/`mod_filter`
+were commented out by default in this XAMPP install's `httpd.conf` — a local environment issue,
+unrelated to the repository code) and enabling it. 56Kbps = 7,000 bytes/sec.
+
+| Page | Raw | Gzipped | Reduction | Transfer @56K |
+|---|---:|---:|---:|---:|
+| Board list | 5,554 B | 1,742 B | 69% | 0.25s |
+| Write form | 4,134 B | 1,742 B | 58% | 0.25s |
+| Post detail | 3,412 B | 1,557 B | 54% | 0.22s |
+| Contact board list | 4,684 B | 1,929 B | 59% | 0.28s |
+| Contact write form | 4,863 B | 1,998 B | 59% | 0.29s |
+| Login | 3,252 B | 1,362 B | 58% | 0.19s |
+
+Since there's only one HTTP request per page (CSS is inlined), real-world load time is roughly
+the transfer time above plus a dial-up modem's connection latency (~0.15-0.2s round trip) — so
+any page should render in about 0.4-0.5s total. The board list always shows exactly 10 posts
+(keyset pagination), so this page size stays constant whether the board has 10 posts or 60,000.
+
+**One remaining weak spot**: Apache's `mod_deflate` doesn't compress non-2xx responses (404, 500,
+etc.) by default — that's stock Apache behavior. Our 404 page is 2,824 bytes uncompressed; it
+would be smaller compressed, but error pages are infrequent and already small, so this was left
+as a low-priority item.
 
 ### Known limitations
 

@@ -8,7 +8,10 @@ return [
         'default_lang' => 'ko',
         'supported_langs' => ['ko', 'en', 'ja'],
         'categories' => ['sos', 'safety', 'missing', 'info', 'free', 'notice'],
-        'debug' => true,
+        // Uncaught exceptions are always logged (error_log) regardless of this flag — only the
+        // browser-visible detail depends on it. Keep this false; flip it locally only if you
+        // need a stack trace in the response while debugging, and flip it back before committing.
+        'debug' => false,
     ],
     'db' => [
         'driver' => 'mysql',
@@ -32,6 +35,7 @@ return [
         'post_min_seconds' => 3,
         'post_max_per_10min' => 10,
         'login_max_attempts_per_15min' => 10,
+        'registration_max_per_15min' => 10,
         'contact_body_max_chars' => 200,
         'contact_phone_max_chars' => 25,
         'contact_local_number_max_chars' => 17,

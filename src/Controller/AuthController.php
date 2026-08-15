@@ -67,6 +67,15 @@ final class AuthController
             return;
         }
 
+        $limits = Config::get('limits');
+        $ipHash = RateLimit::ipHash();
+
+        if (RateLimit::tooManyRegistrations($ipHash, $limits['registration_max_per_15min'], 15)) {
+            View::render('auth/register', ['errors' => [I18n::t('error_rate_limited')], 'old' => []]);
+            return;
+        }
+        RateLimit::recordRegistrationAttempt($ipHash);
+
         $loginId = trim((string) ($_POST['login_id'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
         $nickname = trim((string) ($_POST['nickname'] ?? ''));

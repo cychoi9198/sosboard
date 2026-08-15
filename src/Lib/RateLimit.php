@@ -57,6 +57,16 @@ final class RateLimit
         return self::tooManyAttempts('contact_attempts', $ipHash, $maxAttempts, $windowMinutes);
     }
 
+    public static function recordRegistrationAttempt(string $ipHash): void
+    {
+        self::recordAttempt('registration_attempts', $ipHash);
+    }
+
+    public static function tooManyRegistrations(string $ipHash, int $maxAttempts, int $windowMinutes): bool
+    {
+        return self::tooManyAttempts('registration_attempts', $ipHash, $maxAttempts, $windowMinutes);
+    }
+
     /** $table is always one of our own fixed table name constants below, never user input. */
     private static function recordAttempt(string $table, string $ipHash): void
     {

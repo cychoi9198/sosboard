@@ -83,7 +83,7 @@ final class BoardController
             View::redirect(Url::to('board'));
         }
 
-        $startedAt = $_SESSION['_form_started_at'] ?? 0;
+        $startedAt = $_SESSION['_form_started_at'] ?? null;
         $minSeconds = Config::get('limits')['post_min_seconds'];
         unset($_SESSION['_form_started_at']);
 
@@ -92,7 +92,9 @@ final class BoardController
 
         $errors = [];
 
-        if (time() - (int) $startedAt < $minSeconds) {
+        // A missing marker (POST without ever fetching the form) must fail this check, not
+        // pass it — treating "no timestamp" as "plenty of time has passed" defeats the point.
+        if ($startedAt === null || time() - $startedAt < $minSeconds) {
             $errors[] = I18n::t('error_too_fast');
         }
         if (RateLimit::tooManyPosts($ipHash, $limits['post_max_per_10min'], 10)) {

@@ -78,13 +78,15 @@ final class ContactController
         }
 
         $limits = Config::get('limits');
-        $startedAt = $_SESSION['_contact_form_started_at'] ?? 0;
+        $startedAt = $_SESSION['_contact_form_started_at'] ?? null;
         unset($_SESSION['_contact_form_started_at']);
 
         $ipHash = RateLimit::ipHash();
         $errors = [];
 
-        if (time() - (int) $startedAt < $limits['contact_min_seconds']) {
+        // A missing marker (POST without ever fetching the form) must fail this check, not
+        // pass it — treating "no timestamp" as "plenty of time has passed" defeats the point.
+        if ($startedAt === null || time() - $startedAt < $limits['contact_min_seconds']) {
             $errors[] = I18n::t('error_too_fast');
         }
         if (RateLimit::tooManyContacts($ipHash, $limits['contact_max_per_10min'], 10)) {
