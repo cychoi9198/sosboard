@@ -7,6 +7,7 @@ use App\Lib\Auth;
 use App\Lib\Config;
 use App\Lib\Csrf;
 use App\Lib\I18n;
+use App\Lib\IpBan;
 use App\Lib\RateLimit;
 use App\Lib\Session;
 use App\Lib\Url;
@@ -68,13 +69,14 @@ final class AuthController
         }
 
         $limits = Config::get('limits');
-        $ipHash = RateLimit::ipHash();
+        $ip = RateLimit::clientIp();
 
-        if (RateLimit::tooManyRegistrations($ipHash, $limits['registration_max_per_15min'], 15)) {
+        // Also blocks a banned IP from just creating a fresh account to route around the ban.
+        if (IpBan::isBanned($ip) || RateLimit::tooManyRegistrations($ip, $limits['registration_max_per_15min'], 15)) {
             View::render('auth/register', ['errors' => [I18n::t('error_rate_limited')], 'old' => []]);
             return;
         }
-        RateLimit::recordRegistrationAttempt($ipHash);
+        RateLimit::recordRegistrationAttempt($ip);
 
         $loginId = trim((string) ($_POST['login_id'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');

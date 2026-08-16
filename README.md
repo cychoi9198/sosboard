@@ -26,6 +26,9 @@
   회원가입에 빈도 제한이 빠져있던 것과 최소 작성 시간 검사를 우회할 수 있던 로직을 찾아 고쳤고,
   이어서 오픈 리다이렉트·Host 헤더 주입·경로 순회·세션 쿠키 속성까지 범위를 넓혀 재점검했지만
   추가로 발견된 건 없었습니다. CSP에는 `object-src 'none'`도 추가했습니다.
+- **관리자 모더레이션**: 사전 rate limit 대신 사후 대응 — 관리자가 최근 글을 IP와 함께 보고
+  즉시 IP 차단+글 삭제, 또는 범위 차단 가능. 이 때문에 IP를 이제 평문으로 저장합니다(자세한
+  내용과 트레이드오프는 아래 "관리자 모더레이션 / IP 차단" 참고).
 - **성능**: CSS를 매 요청 HTML에 인라인 삽입해 페이지당 HTTP 요청 1개로 유지(저대역폭 회선 대응),
   gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름), **HTML/CSS 최소화**(템플릿 가독성을
   위해 쓴 개행·들여쓰기를 응답 직전에 제거 — `config/config.php`의 `app.minify_html`로 켜고 끌 수
@@ -61,11 +64,31 @@ for f in sql/migrations/*.sql; do
   mysql --default-character-set=utf8mb4 -u root sosboard < "$f"
 done
 
-# 4. config/config.php에서 DB 접속정보, security.ip_pepper, app.debug(운영 시 false) 수정
+# 4. config/config.php에서 DB 접속정보, app.debug(운영 시 false) 수정
 ```
 
 기본 관리자 계정은 `admin` / `ChangeMe123!` 입니다. **로그인 후 반드시 비밀번호를 바꾸거나, 배포
 전에 새 관리자 계정을 만들고 이 계정은 삭제하세요.**
+
+### 관리자 모더레이션 / IP 차단 (중요한 개인정보 처리방침 변경)
+
+이 게시판은 응급 상황용이라, 아무 글이나 못 올리게 막는 사전 rate limit을 너무 빡빡하게 걸면 오히려
+진짜 급한 글을 막을 수 있습니다. 그래서 **사전 차단 대신 사후 대응**을 택했습니다: 관리자가
+`/{lang}/admin`(로그인한 관리자에게만 네비게이션에 노출됨)에서 최근 게시글/연락게시판 글을 IP와
+함께 보고, 문제 있는 IP를 발견하면 그 자리에서 "차단+글 삭제"를 누르거나, 시작/끝 IP를 직접 입력해
+범위로 차단할 수 있습니다.
+
+**이걸 가능하게 하려고 IP 저장 방식을 바꿨습니다.** 원래는 IP를 절대 원본으로 저장하지 않고
+HMAC 해시로만 저장했는데(익명화), 해시는 특성상 "이 IP가 범위 안에 있는지"를 판단할 수 없어서
+범위 차단이 아예 불가능했습니다. 그래서 **이제 게시글/연락게시판 글에 IP를 그대로(평문) 저장**합니다
+— 관리자는 모더레이션 페이지에서 실제 IP를 보게 됩니다. 차단된 IP로는 글쓰기(게시판/연락게시판)와
+회원가입이 모두 막힙니다(로그인은 막지 않습니다 — 같은 IP를 쓰는 무고한 기존 회원까지 계정에서
+쫓아낼 이유는 없어서). 차단 시 사용자에게는 "차단됐다"는 사실을 굳이 알리지 않고 일반적인 요청
+빈도 제한 문구를 보여줍니다.
+
+**통신사 NAT 등으로 여러 사람이 같은 IP를 공유할 수 있다는 점을 꼭 감안하세요** — IP 하나를
+차단하면 그 IP를 쓰는 다른 무고한 사람도 같이 막힐 수 있습니다. 모더레이션 페이지에서 언제든
+바로 해제할 수 있게 만들어뒀습니다.
 
 ### 디렉터리 구조
 
@@ -207,6 +230,10 @@ slow connections.
   initial page load. A broader follow-up pass (open redirect, Host-header injection, path
   traversal, session cookie attributes) found nothing further. Also added `object-src 'none'`
   to the CSP.
+- **Admin moderation**: reactive rather than preemptive — an admin sees recent posts with the
+  poster's IP and can ban-and-delete a single IP or a whole range on the spot. This is why IPs
+  are now stored in plain text (details and the trade-off are under "Admin moderation / IP bans"
+  below).
 - **Performance**: CSS is inlined into every response (no separate stylesheet request — one HTTP
   request per page, which matters on high-latency connections), gzip compression, keyset pagination
   that stays fast at scale, and **HTML/CSS minification** (the line breaks and indentation used
@@ -244,11 +271,32 @@ for f in sql/migrations/*.sql; do
   mysql --default-character-set=utf8mb4 -u root sosboard < "$f"
 done
 
-# 4. Edit config/config.php: DB credentials, security.ip_pepper, and set app.debug to false in production
+# 4. Edit config/config.php: DB credentials, and set app.debug to false in production
 ```
 
 The seeded admin account is `admin` / `ChangeMe123!`. **Change this password after first login,
 or create a fresh admin account and delete this one before deploying anywhere real.**
+
+### Admin moderation / IP bans (a meaningful privacy-policy change)
+
+This board is for emergencies, so tight preemptive rate limits risk delaying a genuine urgent
+post. We chose **reactive moderation instead of preemptive blocking**: an admin (the nav link
+only shows up when logged in as one) reviews recent board/contact posts at `/{lang}/admin` along
+with the poster's IP, and can either ban-and-delete a single offending IP on the spot, or type in
+a start/end IP range to ban directly.
+
+**Making this possible required changing how IPs are stored.** IPs used to never be stored raw —
+only an HMAC hash (anonymized) — but a hash can't tell you whether an IP falls inside a range, so
+range bans were simply impossible. **Posts and contact-board entries now store the IP in plain
+text**, and an admin sees the real address on the moderation page. A banned IP is blocked from
+posting (board and contact) and from registering a new account (login is not blocked — no reason
+to lock an innocent existing member out of their own account just because they share an IP with
+someone abusive). The rejection message doesn't reveal that it's specifically a ban, just the
+same generic rate-limit wording.
+
+**Keep in mind that multiple people can share one IP** (carrier-grade NAT, for instance) —
+banning an IP can catch innocent people using the same one. The moderation page lets you unban
+instantly if that happens.
 
 ### Directory structure
 
@@ -396,6 +444,9 @@ exact-match search/leading-zero stripping, login, and registration all verified 
   修正しました。続けてオープンリダイレクト・Hostヘッダーインジェクション・パストラバーサル・
   セッションCookie属性まで範囲を広げて再点検しましたが、追加の問題は見つかりませんでした。CSPに
   `object-src 'none'`も追加しています。
+- **管理者モデレーション**: 事前のレート制限ではなく事後対応 — 管理者は投稿者のIPと一緒に最近の
+  投稿を確認でき、その場で単一IPまたは範囲でまとめて遮断+削除できます。このためIPは現在平文で
+  保存されています(詳細とトレードオフは下記「管理者モデレーション / IP遮断」を参照)。
 - **パフォーマンス**: CSSを毎リクエストHTMLにインライン挿入し、ページごとのHTTPリクエストを
   1つに抑えています(低帯域回線向け)。gzip圧縮、keysetページネーション(データ量が多くても高速)、
   **HTML/CSSの最小化**(テンプレートを読みやすくするための改行・インデントを送信直前に除去 —
@@ -433,11 +484,31 @@ for f in sql/migrations/*.sql; do
   mysql --default-character-set=utf8mb4 -u root sosboard < "$f"
 done
 
-# 4. config/config.php を編集: DB接続情報、security.ip_pepper、本番環境ではapp.debugをfalseに
+# 4. config/config.php を編集: DB接続情報、本番環境ではapp.debugをfalseに
 ```
 
 初期管理者アカウントは `admin` / `ChangeMe123!` です。**初回ログイン後に必ずパスワードを変更する
 か、実際にデプロイする前に新しい管理者アカウントを作成してこのアカウントは削除してください。**
+
+### 管理者モデレーション / IP遮断(個人情報の扱いに関わる重要な変更)
+
+この掲示板は緊急時向けなので、事前のレート制限を厳しくしすぎると本当に急ぎの投稿まで妨げてしまう
+恐れがあります。そこで**事前ブロックではなく事後対応**を選びました — 管理者(ログインすると
+ナビゲーションにリンクが表示されます)が`/{lang}/admin`で最近の投稿・連絡掲示板の投稿を投稿者の
+IPと一緒に確認し、問題のあるIPをその場で「遮断+削除」するか、開始/終了IPを直接入力して範囲で
+遮断できます。
+
+**これを可能にするため、IPの保存方法を変更しました。** 以前はIPを生のまま保存せず、HMACハッシュ
+のみを保存していました(匿名化)。しかしハッシュではあるIPが特定の範囲に含まれるかどうか判定
+できないため、範囲での遮断はそもそも不可能でした。**そのため現在は投稿・連絡掲示板の投稿にIPを
+平文で保存**しており、管理者はモデレーションページで実際のIPアドレスを見ることになります。
+遮断されたIPは投稿(掲示板・連絡掲示板)と新規会員登録の両方がブロックされます(ログインはブロック
+しません — 同じIPを使っているだけの無関係な既存会員のアカウントまでロックする理由はないため)。
+拒否メッセージには「遮断されている」とは明示せず、通常のレート制限と同じ文言を表示します。
+
+**複数の人が同じIPを共有し得る点に注意してください**(キャリアのNATなど)— IPを遮断すると、同じ
+IPを使っている無関係な人も巻き込んでしまう場合があります。モデレーションページからいつでもすぐに
+解除できるようにしてあります。
 
 ### ディレクトリ構成
 

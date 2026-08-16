@@ -8,6 +8,7 @@ use App\Lib\Config;
 use App\Lib\Countries;
 use App\Lib\Csrf;
 use App\Lib\I18n;
+use App\Lib\IpBan;
 use App\Lib\Phone;
 use App\Lib\RateLimit;
 use App\Lib\Url;
@@ -81,15 +82,19 @@ final class ContactController
         $startedAt = $_SESSION['_contact_form_started_at'] ?? null;
         unset($_SESSION['_contact_form_started_at']);
 
-        $ipHash = RateLimit::ipHash();
+        $ip = RateLimit::clientIp();
         $errors = [];
+
+        if (IpBan::isBanned($ip)) {
+            $errors[] = I18n::t('error_rate_limited');
+        }
 
         // A missing marker (POST without ever fetching the form) must fail this check, not
         // pass it — treating "no timestamp" as "plenty of time has passed" defeats the point.
         if ($startedAt === null || time() - $startedAt < $limits['contact_min_seconds']) {
             $errors[] = I18n::t('error_too_fast');
         }
-        if (RateLimit::tooManyContacts($ipHash, $limits['contact_max_per_10min'], 10)) {
+        if (RateLimit::tooManyContacts($ip, $limits['contact_max_per_10min'], 10)) {
             $errors[] = I18n::t('error_rate_limited');
         }
 
@@ -122,10 +127,10 @@ final class ContactController
             return;
         }
 
-        RateLimit::recordContactAttempt($ipHash);
+        RateLimit::recordContactAttempt($ip);
 
         $repo = new ContactRepository();
-        $id = $repo->create($phone, trim($body), $ipHash);
+        $id = $repo->create($phone, trim($body), $ip);
 
         View::flash(I18n::t('flash_contact_created'), 'success');
         View::redirect(Url::to('contact/view/' . $id));

@@ -36,11 +36,6 @@ return [
         'name' => 'sosb_sid',
         'lifetime_seconds' => 60 * 60 * 24 * 7,
     ],
-    'security' => [
-        // HMAC pepper for hashing IP addresses before storage (abuse-rate limiting only,
-        // never store raw IPs). CHANGE THIS before deploying anywhere non-local.
-        'ip_pepper' => 'dev-local-pepper-change-me-2f9a7c1e',
-    ],
     'limits' => [
         'post_title_max_chars' => 100,
         'post_body_max_chars' => 500,

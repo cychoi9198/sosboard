@@ -30,6 +30,9 @@ $supportedLangs = \App\Lib\Config::get('app')['supported_langs'];
 <a href="<?= View::e(Url::to('board')) ?>"><?= View::e(I18n::t('nav_board')) ?></a>
 <a href="<?= View::e(Url::to('board/write')) ?>"><?= View::e(I18n::t('nav_write')) ?></a>
 <a href="<?= View::e(Url::to('contact')) ?>"><?= View::e(I18n::t('nav_contact')) ?></a>
+<?php if (Auth::isAdmin()): ?>
+<a href="<?= View::e(Url::to('admin')) ?>"><?= View::e(I18n::t('nav_admin')) ?></a>
+<?php endif; ?>
 <?php if (Auth::check()): ?>
 <?= View::e(I18n::t('nav_welcome', ['{nick}' => Auth::user()['nickname']])) ?>
 <form method="post" action="<?= View::e(Url::to('auth/logout')) ?>" class="inline-form">

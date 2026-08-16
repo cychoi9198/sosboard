@@ -106,8 +106,8 @@ final class PostRepository
     public function create(array $data): int
     {
         $stmt = Db::conn()->prepare(
-            'INSERT INTO posts (user_id, guest_nickname, guest_password_hash, category, title, body, lang, ip_hash, status)
-             VALUES (:user_id, :guest_nickname, :guest_password_hash, :category, :title, :body, :lang, :ip_hash, 1)'
+            'INSERT INTO posts (user_id, guest_nickname, guest_password_hash, category, title, body, lang, ip, status)
+             VALUES (:user_id, :guest_nickname, :guest_password_hash, :category, :title, :body, :lang, :ip, 1)'
         );
         $stmt->bindValue('user_id', $data['user_id'], $data['user_id'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->bindValue('guest_nickname', $data['guest_nickname']);
@@ -116,7 +116,7 @@ final class PostRepository
         $stmt->bindValue('title', $data['title']);
         $stmt->bindValue('body', $data['body']);
         $stmt->bindValue('lang', $data['lang']);
-        $stmt->bindValue('ip_hash', $data['ip_hash'], PDO::PARAM_LOB);
+        $stmt->bindValue('ip', $data['ip']);
         $stmt->execute();
 
         return (int) Db::conn()->lastInsertId();
@@ -127,5 +127,27 @@ final class PostRepository
     {
         $stmt = Db::conn()->prepare('UPDATE posts SET status = 2 WHERE id = :id');
         $stmt->execute(['id' => $id]);
+    }
+
+    /** For the admin moderation view — most recent posts regardless of category, with the poster's IP. */
+    public function recentForModeration(int $limit): array
+    {
+        $stmt = Db::conn()->prepare(
+            'SELECT p.id, p.title, p.category, p.ip, p.guest_nickname, p.user_id, p.created_at, u.nickname AS user_nickname
+             FROM posts p LEFT JOIN users u ON u.id = p.user_id
+             WHERE p.status = 1
+             ORDER BY p.id DESC LIMIT :limit'
+        );
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /** Bulk moderation action: soft-delete every active post from an exact IP. Returns how many. */
+    public function softDeleteByIp(string $ip): int
+    {
+        $stmt = Db::conn()->prepare('UPDATE posts SET status = 2 WHERE ip = :ip AND status = 1');
+        $stmt->execute(['ip' => $ip]);
+        return $stmt->rowCount();
     }
 }

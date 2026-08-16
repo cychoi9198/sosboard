@@ -16,6 +16,7 @@ spl_autoload_register(function (string $class): void {
     }
 });
 
+use App\Controller\AdminController;
 use App\Controller\AuthController;
 use App\Controller\BoardController;
 use App\Controller\ContactController;
@@ -115,6 +116,16 @@ if ($r1 === '' || $r1 === 'board') {
         (new ContactController())->view((int) $r3);
     } elseif ($r2 === 'delete' && ctype_digit($r3) && $method === 'POST') {
         (new ContactController())->delete((int) $r3);
+    } else {
+        $notFound();
+    }
+} elseif ($r1 === 'admin') {
+    if ($r2 === '') {
+        (new AdminController())->moderation();
+    } elseif ($r2 === 'ban' && $method === 'POST') {
+        (new AdminController())->ban();
+    } elseif ($r2 === 'unban' && $method === 'POST') {
+        (new AdminController())->unban();
     } else {
         $notFound();
     }

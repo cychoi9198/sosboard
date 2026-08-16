@@ -7,6 +7,7 @@ use App\Lib\Auth;
 use App\Lib\Config;
 use App\Lib\Csrf;
 use App\Lib\I18n;
+use App\Lib\IpBan;
 use App\Lib\RateLimit;
 use App\Lib\Url;
 use App\Lib\Validator;
@@ -88,16 +89,22 @@ final class BoardController
         unset($_SESSION['_form_started_at']);
 
         $limits = Config::get('limits');
-        $ipHash = RateLimit::ipHash();
+        $ip = RateLimit::clientIp();
 
         $errors = [];
+
+        // Banned IPs get the same generic message as a rate limit, not a distinct "you are
+        // banned" — no reason to confirm that to whoever's on the other end of it.
+        if (IpBan::isBanned($ip)) {
+            $errors[] = I18n::t('error_rate_limited');
+        }
 
         // A missing marker (POST without ever fetching the form) must fail this check, not
         // pass it — treating "no timestamp" as "plenty of time has passed" defeats the point.
         if ($startedAt === null || time() - $startedAt < $minSeconds) {
             $errors[] = I18n::t('error_too_fast');
         }
-        if (RateLimit::tooManyPosts($ipHash, $limits['post_max_per_10min'], 10)) {
+        if (RateLimit::tooManyPosts($ip, $limits['post_max_per_10min'], 10)) {
             $errors[] = I18n::t('error_rate_limited');
         }
 
@@ -155,7 +162,7 @@ final class BoardController
             return;
         }
 
-        RateLimit::recordPostAttempt($ipHash);
+        RateLimit::recordPostAttempt($ip);
 
         $repo = new PostRepository();
         $id = $repo->create([
@@ -166,7 +173,7 @@ final class BoardController
             'title' => trim($title),
             'body' => trim($body),
             'lang' => I18n::locale(),
-            'ip_hash' => $ipHash,
+            'ip' => $ip,
         ]);
 
         View::flash(I18n::t('flash_post_created'), 'success');

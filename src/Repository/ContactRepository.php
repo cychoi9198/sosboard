@@ -52,14 +52,14 @@ final class ContactRepository
         return $row ?: null;
     }
 
-    public function create(string $phone, string $body, string $ipHash): int
+    public function create(string $phone, string $body, string $ip): int
     {
         $stmt = Db::conn()->prepare(
-            'INSERT INTO contacts (phone, body, ip_hash, status) VALUES (:phone, :body, :ip_hash, 1)'
+            'INSERT INTO contacts (phone, body, ip, status) VALUES (:phone, :body, :ip, 1)'
         );
         $stmt->bindValue('phone', $phone);
         $stmt->bindValue('body', $body);
-        $stmt->bindValue('ip_hash', $ipHash, PDO::PARAM_LOB);
+        $stmt->bindValue('ip', $ip);
         $stmt->execute();
 
         return (int) Db::conn()->lastInsertId();
@@ -70,5 +70,24 @@ final class ContactRepository
     {
         $stmt = Db::conn()->prepare('UPDATE contacts SET status = 2 WHERE id = :id');
         $stmt->execute(['id' => $id]);
+    }
+
+    /** For the admin moderation view — most recent contact-board entries with the poster's IP. */
+    public function recentForModeration(int $limit): array
+    {
+        $stmt = Db::conn()->prepare(
+            'SELECT id, phone, body, ip, created_at FROM contacts WHERE status = 1 ORDER BY id DESC LIMIT :limit'
+        );
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /** Bulk moderation action: soft-delete every active contact entry from an exact IP. Returns how many. */
+    public function softDeleteByIp(string $ip): int
+    {
+        $stmt = Db::conn()->prepare('UPDATE contacts SET status = 2 WHERE ip = :ip AND status = 1');
+        $stmt->execute(['ip' => $ip]);
+        return $stmt->rowCount();
     }
 }

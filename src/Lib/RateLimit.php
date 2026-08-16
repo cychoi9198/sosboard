@@ -7,12 +7,15 @@ use App\Lib\Db;
 
 final class RateLimit
 {
-    /** HMAC-hashed client IP (binary, 16 bytes) — never store the raw address. */
-    public static function ipHash(): string
+    /**
+     * The client's IP address, stored as-is (not hashed). Needed so an admin can review recent
+     * posts and ban an abusive source after the fact — see IpBan. This board is for emergencies,
+     * so we deliberately don't lean on tight preemptive rate limits that could delay a genuine
+     * urgent post; moderation is reactive instead.
+     */
+    public static function clientIp(): string
     {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        $pepper = Config::get('security')['ip_pepper'];
-        return substr(hash_hmac('sha256', $ip, $pepper, true), 0, 16);
+        return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     }
 
     public static function recordLoginAttempt(string $identifier, bool $success): void
@@ -37,50 +40,50 @@ final class RateLimit
         return $count >= $maxAttempts;
     }
 
-    public static function recordPostAttempt(string $ipHash): void
+    public static function recordPostAttempt(string $ip): void
     {
-        self::recordAttempt('post_attempts', $ipHash);
+        self::recordAttempt('post_attempts', $ip);
     }
 
-    public static function tooManyPosts(string $ipHash, int $maxPosts, int $windowMinutes): bool
+    public static function tooManyPosts(string $ip, int $maxPosts, int $windowMinutes): bool
     {
-        return self::tooManyAttempts('post_attempts', $ipHash, $maxPosts, $windowMinutes);
+        return self::tooManyAttempts('post_attempts', $ip, $maxPosts, $windowMinutes);
     }
 
-    public static function recordContactAttempt(string $ipHash): void
+    public static function recordContactAttempt(string $ip): void
     {
-        self::recordAttempt('contact_attempts', $ipHash);
+        self::recordAttempt('contact_attempts', $ip);
     }
 
-    public static function tooManyContacts(string $ipHash, int $maxAttempts, int $windowMinutes): bool
+    public static function tooManyContacts(string $ip, int $maxAttempts, int $windowMinutes): bool
     {
-        return self::tooManyAttempts('contact_attempts', $ipHash, $maxAttempts, $windowMinutes);
+        return self::tooManyAttempts('contact_attempts', $ip, $maxAttempts, $windowMinutes);
     }
 
-    public static function recordRegistrationAttempt(string $ipHash): void
+    public static function recordRegistrationAttempt(string $ip): void
     {
-        self::recordAttempt('registration_attempts', $ipHash);
+        self::recordAttempt('registration_attempts', $ip);
     }
 
-    public static function tooManyRegistrations(string $ipHash, int $maxAttempts, int $windowMinutes): bool
+    public static function tooManyRegistrations(string $ip, int $maxAttempts, int $windowMinutes): bool
     {
-        return self::tooManyAttempts('registration_attempts', $ipHash, $maxAttempts, $windowMinutes);
+        return self::tooManyAttempts('registration_attempts', $ip, $maxAttempts, $windowMinutes);
     }
 
     /** $table is always one of our own fixed table name constants below, never user input. */
-    private static function recordAttempt(string $table, string $ipHash): void
+    private static function recordAttempt(string $table, string $ip): void
     {
-        $stmt = Db::conn()->prepare("INSERT INTO {$table} (ip_hash) VALUES (:ip)");
-        $stmt->execute(['ip' => $ipHash]);
+        $stmt = Db::conn()->prepare("INSERT INTO {$table} (ip) VALUES (:ip)");
+        $stmt->execute(['ip' => $ip]);
     }
 
-    private static function tooManyAttempts(string $table, string $ipHash, int $maxAttempts, int $windowMinutes): bool
+    private static function tooManyAttempts(string $table, string $ip, int $maxAttempts, int $windowMinutes): bool
     {
         $stmt = Db::conn()->prepare(
             "SELECT COUNT(*) AS c FROM {$table}
-             WHERE ip_hash = :ip AND attempted_at > :cutoff"
+             WHERE ip = :ip AND attempted_at > :cutoff"
         );
-        $stmt->bindValue('ip', $ipHash);
+        $stmt->bindValue('ip', $ip);
         $stmt->bindValue('cutoff', self::cutoff($windowMinutes));
         $stmt->execute();
         $count = (int) $stmt->fetch()['c'];
