@@ -21,7 +21,10 @@ use App\Controller\BoardController;
 use App\Controller\ContactController;
 use App\Lib\Config;
 use App\Lib\I18n;
+use App\Lib\Minify;
 use App\Lib\Session;
+
+$minifyHtml = Config::get('app')['minify_html'];
 
 set_exception_handler(function (\Throwable $e): void {
     error_log($e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
@@ -34,6 +37,11 @@ set_exception_handler(function (\Throwable $e): void {
 // HTTP round-trip on high-latency legacy connections. The CSP allows exactly this
 // content via a hash, so it stays strict without needing 'unsafe-inline'.
 $inlineCss = file_get_contents(__DIR__ . '/style.css');
+if ($minifyHtml) {
+    $inlineCss = Minify::css($inlineCss);
+}
+// The hash covers exactly what gets embedded below, so it must be computed after minifying —
+// otherwise the CSP would allow the unminified content's hash instead of the real one.
 $cssHash = base64_encode(hash('sha256', $inlineCss, true));
 $GLOBALS['inlineCss'] = $inlineCss;
 
@@ -41,6 +49,10 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: same-origin');
 header("Content-Security-Policy: default-src 'self'; style-src 'sha256-{$cssHash}'; img-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'");
+
+if ($minifyHtml) {
+    ob_start(static fn (string $buffer): string => Minify::html($buffer));
+}
 
 Session::start();
 

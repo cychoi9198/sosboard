@@ -27,8 +27,12 @@
   이어서 오픈 리다이렉트·Host 헤더 주입·경로 순회·세션 쿠키 속성까지 범위를 넓혀 재점검했지만
   추가로 발견된 건 없었습니다. CSP에는 `object-src 'none'`도 추가했습니다.
 - **성능**: CSS를 매 요청 HTML에 인라인 삽입해 페이지당 HTTP 요청 1개로 유지(저대역폭 회선 대응),
-  gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름). 56Kbps 기준 실측: 각 페이지가
-  1.2~2KB(gzip 후)로 압축되어 0.2~0.3초 안에 전송됩니다 — 아래 "성능 실측" 참고.
+  gzip 압축, keyset 페이지네이션(대량 데이터에서도 빠름), **HTML/CSS 최소화**(템플릿 가독성을
+  위해 쓴 개행·들여쓰기를 응답 직전에 제거 — `config/config.php`의 `app.minify_html`로 켜고 끌 수
+  있고 기본값은 켜짐. gzip이 이미 반복되는 공백을 잘 압축해줘서 gzip 이후 크기는 소폭만
+  줄지만, gzip을 아예 안 보내는(`Accept-Encoding` 미지원) 구형 브라우저에는 이게 유일하게
+  체감되는 절감입니다). 56Kbps 기준 실측: 각 페이지가 1.2~2KB(gzip 후)로 압축되어 0.2~0.3초
+  안에 전송됩니다 — 아래 "성능 실측" 참고.
 
 ### 기술 스택
 
@@ -71,7 +75,7 @@ done
 /style.css              CSS 원본 소스 (브라우저에 직접 서빙되지 않고 index.php가 읽어서 인라인)
 /config/config.php      앱 설정 (DB, 세션, 보안, 제한값) — 웹 접근 차단됨
 /src/Lib/                Db, Session, Csrf, I18n, Auth, View, Validator, RateLimit, Url, Dates,
-                         Phone, Countries, Config
+                         Phone, Countries, Config, Minify
 /src/Repository/         UserRepository, PostRepository, ContactRepository (PDO)
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/
@@ -205,8 +209,12 @@ slow connections.
   to the CSP.
 - **Performance**: CSS is inlined into every response (no separate stylesheet request — one HTTP
   request per page, which matters on high-latency connections), gzip compression, keyset pagination
-  that stays fast at scale. Measured at simulated 56Kbps: every page compresses to 1.2-2KB and
-  transfers in 0.2-0.3s — see "Measured performance" below.
+  that stays fast at scale, and **HTML/CSS minification** (the line breaks and indentation used
+  for readable templates are stripped right before sending — toggle via `app.minify_html` in
+  `config/config.php`, on by default. Gzip already compresses repeated whitespace well, so the
+  post-gzip saving is modest, but for old browsers that don't send `Accept-Encoding: gzip` at
+  all, this is the only saving that reaches them). Measured at simulated 56Kbps: every page
+  compresses to 1.2-2KB and transfers in 0.2-0.3s — see "Measured performance" below.
 
 ### Tech stack
 
@@ -250,7 +258,7 @@ or create a fresh admin account and delete this one before deploying anywhere re
 /style.css              Source CSS (never served directly — index.php reads and inlines it)
 /config/config.php      App config (DB, session, security, limits) — blocked from web access
 /src/Lib/                Db, Session, Csrf, I18n, Auth, View, Validator, RateLimit, Url, Dates,
-                         Phone, Countries, Config
+                         Phone, Countries, Config, Minify
 /src/Repository/         UserRepository, PostRepository, ContactRepository (PDO)
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/
@@ -389,9 +397,12 @@ exact-match search/leading-zero stripping, login, and registration all verified 
   セッションCookie属性まで範囲を広げて再点検しましたが、追加の問題は見つかりませんでした。CSPに
   `object-src 'none'`も追加しています。
 - **パフォーマンス**: CSSを毎リクエストHTMLにインライン挿入し、ページごとのHTTPリクエストを
-  1つに抑えています(低帯域回線向け)。gzip圧縮、keysetページネーション(データ量が多くても高速)。
-  56Kbpsでの実測ではページごとに圧縮後1.2〜2KBで、転送時間は0.2〜0.3秒 — 詳細は下記
-  「実測パフォーマンス」を参照。
+  1つに抑えています(低帯域回線向け)。gzip圧縮、keysetページネーション(データ量が多くても高速)、
+  **HTML/CSSの最小化**(テンプレートを読みやすくするための改行・インデントを送信直前に除去 —
+  `config/config.php`の`app.minify_html`でオン/オフ切り替え可能、デフォルトはオン。gzipは
+  繰り返す空白をすでにうまく圧縮するのでgzip後の削減幅は小さいですが、`Accept-Encoding: gzip`を
+  送らない古いブラウザにはこれだけが届く削減になります)。56Kbpsでの実測ではページごとに圧縮後
+  1.2〜2KBで、転送時間は0.2〜0.3秒 — 詳細は下記「実測パフォーマンス」を参照。
 
 ### 技術スタック
 
@@ -436,7 +447,7 @@ done
 /style.css              CSSの元ソース(ブラウザに直接配信されず、index.phpが読み込んでインライン化)
 /config/config.php      アプリ設定(DB、セッション、セキュリティ、制限値) — Webアクセス不可
 /src/Lib/                Db, Session, Csrf, I18n, Auth, View, Validator, RateLimit, Url, Dates,
-                         Phone, Countries, Config
+                         Phone, Countries, Config, Minify
 /src/Repository/         UserRepository, PostRepository, ContactRepository (PDO)
 /src/Controller/         BoardController, AuthController, ContactController
 /src/Views/               board/, contact/, auth/, partials/

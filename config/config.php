@@ -12,6 +12,12 @@ return [
         // browser-visible detail depends on it. Keep this false; flip it locally only if you
         // need a stack trace in the response while debugging, and flip it back before committing.
         'debug' => false,
+        // Strips the whitespace/newlines the templates use for readability (both the rendered
+        // HTML and the inlined CSS) before sending the response. On, by default: this project's
+        // whole point is minimizing bytes for slow/legacy connections, and some very old
+        // browsers don't send "Accept-Encoding: gzip" at all, so this is the one saving that
+        // reaches them too. Turn off locally if you want to view page source unminified.
+        'minify_html' => true,
     ],
     'db' => [
         'driver' => 'mysql',
