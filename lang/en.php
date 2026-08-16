@@ -28,6 +28,7 @@ return [
     'col_date' => 'Date',
     'col_phone' => 'Phone',
     'guest_marker' => '(guest)',
+    'author_admin' => 'Admin',
 
     'btn_write' => 'Write',
     'btn_submit' => 'Submit',

@@ -62,7 +62,8 @@ $catQuery = $search !== '' ? '&q=' . urlencode($search) : '';
 <tbody>
 <?php foreach ($posts as $post): ?>
 <?php
-$nickname = $post['user_nickname'] ?? $post['guest_nickname'] ?? '?';
+$isAdminAuthor = (int) ($post['user_role'] ?? 0) >= 9;
+$nickname = $isAdminAuthor ? I18n::t('author_admin') : ($post['user_nickname'] ?? $post['guest_nickname'] ?? '?');
 $isGuest = $post['user_id'] === null;
 ?>
 <tr>

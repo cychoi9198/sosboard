@@ -23,7 +23,7 @@ final class PostRepository
         $isSqlite = Db::driver() === 'sqlite';
         $ftsJoin = ($isSqlite && $searchQuery !== null) ? ' JOIN posts_fts ON posts_fts.rowid = p.id' : '';
 
-        $sql = 'SELECT p.*, u.nickname AS user_nickname
+        $sql = 'SELECT p.*, u.nickname AS user_nickname, u.role AS user_role
                 FROM posts p LEFT JOIN users u ON u.id = p.user_id' . $ftsJoin . '
                 WHERE p.status = 1';
         $params = [];
@@ -94,7 +94,7 @@ final class PostRepository
     public function find(int $id): ?array
     {
         $stmt = Db::conn()->prepare(
-            'SELECT p.*, u.nickname AS user_nickname
+            'SELECT p.*, u.nickname AS user_nickname, u.role AS user_role
              FROM posts p LEFT JOIN users u ON u.id = p.user_id
              WHERE p.id = :id AND p.status = 1'
         );

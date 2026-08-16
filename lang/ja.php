@@ -28,6 +28,7 @@ return [
     'col_date' => '投稿日',
     'col_phone' => '電話番号',
     'guest_marker' => '(ゲスト)',
+    'author_admin' => '管理者',
 
     'btn_write' => '投稿する',
     'btn_submit' => '登録',

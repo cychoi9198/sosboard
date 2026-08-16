@@ -11,7 +11,8 @@ use App\Lib\View;
 /** @var bool $canDelete */
 /** @var bool $requiresGuestPassword */
 
-$nickname = $post['user_nickname'] ?? $post['guest_nickname'] ?? '?';
+$isAdminAuthor = (int) ($post['user_role'] ?? 0) >= 9;
+$nickname = $isAdminAuthor ? I18n::t('author_admin') : ($post['user_nickname'] ?? $post['guest_nickname'] ?? '?');
 $isGuest = $post['user_id'] === null;
 ?>
 <h2><?= View::e($post['title']) ?></h2>

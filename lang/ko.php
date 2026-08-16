@@ -28,6 +28,7 @@ return [
     'col_date' => '작성일',
     'col_phone' => '전화번호',
     'guest_marker' => '(비회원)',
+    'author_admin' => '관리자',
 
     'btn_write' => '글쓰기',
     'btn_submit' => '등록',
